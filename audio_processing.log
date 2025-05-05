@@ -1,0 +1,2 @@
+2025-05-05 01:57:50,296 - ERROR - Path validation failed for chunk_length: 5
+2025-05-05 01:57:50,296 - CRITICAL - Fatal error in main execution: _path_normpath: path should be string, bytes or os.PathLike, not int
