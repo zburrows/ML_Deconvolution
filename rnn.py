@@ -10,13 +10,13 @@ import pickle
 
 # Configuration
 config = {
-    'sample_rate': 22050,
-    'segment_length': 22050,  # 1 second of audio
+    'sample_rate': 44100,
+    'segment_length': 44100,  # 1 second of audio
     'batch_size': 32,
-    'hidden_size': 128,
-    'num_layers': 2,
-    'learning_rate': 0.001,
-    'num_epochs': 50,
+    'hidden_size': 256,
+    'num_layers': 3,
+    'learning_rate': 0.0001,
+    'num_epochs': 100,
     'device': 'cuda' if torch.cuda.is_available() else 'cpu'
 }
 
@@ -95,7 +95,7 @@ def train_model(file_pairs, config):
         model.train()
         running_loss = 0.0
         
-        for wet, dry in tqdm(dataloader, desc=f"Epoch {epoch+1}"):
+        for wet, dry in dataloader:
             wet = wet.to(config['device'])
             dry = dry.to(config['device'])
             
@@ -150,11 +150,11 @@ if __name__ == "__main__":
     file_pairs_dict = pickle.load(open("assets/file_mapping.pkl", "rb"))
     # Randomize the file pairs
     file_pairs_list = list(file_pairs_dict.items())
-    
+    file_pairs_list = [('assets/dry/swing_dry.wav', 'assets/wet/swing_wet.wav'), ('assets/dry/hymn_dry.wav', 'assets/wet/hymn_wet.wav'), ('assets/dry/flamenco_dry.wav', 'assets/wet/flamenco_wet.wav'), ('assets/dry/brahms_dry.wav', 'assets/wet/brahms_wet.wav'), ('assets/dry/mozart_dry.wav', 'assets/wet/mozart_wet.wav')]
     # Shuffle the list of file pairs
     random.seed(12345)  # For reproducibility
     random.shuffle(file_pairs_list)
-    
+    print(file_pairs_list)
     # Train the model
     print("Training RNN model...")
     model = train_model(file_pairs_list, config)
@@ -162,11 +162,3 @@ if __name__ == "__main__":
     # Save the trained model
     torch.save(model.state_dict(), "audio_rnn_model.pth")
     print("Model saved to audio_rnn_model.pth")
-    
-    # Example prediction
-    wet_test_path = "assets/suzanne.wav"
-    dry_output_path = "assets/predicted_dry.wav"
-    
-    print(f"\nPredicting dry signal for {wet_test_path}")
-    predicted_dry = predict_dry_signal(model, wet_test_path, dry_output_path)
-    print(f"Predicted dry signal saved to {dry_output_path}")

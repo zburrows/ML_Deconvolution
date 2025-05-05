@@ -3,7 +3,7 @@ import torchaudio
 import torch.nn as nn
 
 class AudioRNN(nn.Module):
-    def __init__(self, input_size=1, hidden_size=32, num_layers=2):
+    def __init__(self, input_size=1, hidden_size=512, num_layers=2):
         super().__init__()
         self.gru = nn.GRU(input_size, hidden_size, num_layers, batch_first=True)
         self.fc = nn.Linear(hidden_size, 1)
@@ -70,8 +70,8 @@ if __name__ == "__main__":
     # Config - CHANGE THESE TO MATCH YOUR MODEL
     CONFIG = {
         'model_path': 'audio_rnn_model.pth',
-        'input_audio': 'assets/miserere_short.wav',
-        'output_audio': 'assets/predicted_miserere.wav',
+        'input_audio': 'assets/brahms_predicted.wav',
+        'output_audio': 'assets/new_predicted.wav',
         'segment_length': 22050  # Must match training
     }
     
