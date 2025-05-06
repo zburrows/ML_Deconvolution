@@ -1,7 +1,57 @@
 import torch
 import torchaudio
 import torch.nn as nn
+import multiprocessing
 
+# Future addition: remove pops and clicks by overlapping segments
+# def create_overlapping_segments(waveform, segment_length=5000, overlap=2500):
+#     """Create overlapping segments with fade-in and fade-out."""
+#     # Convert to mono if needed
+#     if waveform.dim() > 1:
+#         waveform = waveform.mean(dim=0)
+    
+#     step = segment_length - overlap
+#     num_segments = (len(waveform) - overlap) // step
+#     segments = []
+
+#     for i in range(num_segments):
+#         start = i * step
+#         end = start + segment_length
+#         segment = waveform[start:end]
+#         segment = torchaudio.transforms.Fade(fade_in_len=overlap, fade_out_len=overlap)(segment)
+#         segments.append(segment)
+
+#     return torch.stack(segments).unsqueeze(1)  # [num_segments, 1, segment_length]
+
+def parallel_predict(model, segments, device='cpu'):
+    """Process segments in parallel for faster operation"""
+    num_workers = multiprocessing.cpu_count() # as many as available cores
+    print(f"Using {num_workers} workers for parallel processing")
+    # initialize the model and device for each worker
+    with multiprocessing.Pool(num_workers, initializer=worker_init, initargs=(model, device)) as pool:
+        dry_segments = pool.map(worker, segments) # process all segments in parallel
+
+    return dry_segments
+
+# Global variables for multiprocessing
+_worker_model = None
+_worker_device = None
+
+def worker_init(model, device):
+    """Initialize global variables for each worker."""
+    global _worker_model, _worker_device
+    _worker_model = model
+    _worker_device = device
+
+def worker(segment):
+    """Worker function for multiprocessing."""
+    global _worker_model, _worker_device
+    with torch.no_grad():
+        segment = segment.to(_worker_device)
+        print(f"Processing segment on worker {multiprocessing.current_process().name}")
+        return _worker_model(segment).cpu()
+
+# hyperparameters copied from rnn.py
 class AudioRNN(nn.Module):
     def __init__(self, input_size=1, hidden_size=512, num_layers=2):
         super().__init__()
@@ -14,89 +64,39 @@ class AudioRNN(nn.Module):
         out = self.fc(out)
         return out.squeeze(-1)
 
+# load from presaved model
 def load_model(model_path, device='cpu'):
     model = AudioRNN().to(device)
     state_dict = torch.load(model_path, map_location=device)
-    
-    # Handle potential state dict mismatches
-    if next(iter(state_dict.keys())).startswith('module.'):
-        # Fix for DataParallel saved models
-        from collections import OrderedDict
-        new_state_dict = OrderedDict()
-        for k, v in state_dict.items():
-            name = k[7:]  # Remove 'module.'
-            new_state_dict[name] = v
-        state_dict = new_state_dict
     
     model.load_state_dict(state_dict)
     model.eval()
     return model
 
-def preprocess_audio(waveform, sr, segment_length=22050):
-    """Ensure proper shape and segmentation"""
-    # Convert to mono if needed
+def preprocess_audio(waveform, segment_length=5000):
+    # convert to mono if needed
     if waveform.dim() > 1:
         waveform = waveform.mean(dim=0)
     
-    # Pad to multiple of segment length
+    # make sure waveform is divisible by segment length
     if (pad_len := segment_length - (len(waveform) % segment_length)) != segment_length:
         waveform = torch.nn.functional.pad(waveform, (0, pad_len))
     
     # Split into segments
     segments = waveform.unfold(0, segment_length, segment_length)
-    return segments.unsqueeze(1)  # [num_segments, 1, segment_length]
+    # fade for smoother transitions
+    segments = [torchaudio.transforms.Fade(100, 100)(seg) for seg in segments]
+    segments = torch.stack(segments)
+    return segments.unsqueeze(1)
 
 def predict(model, input_path, output_path, device='cpu'):
-    # Load audio
     waveform, sr = torchaudio.load(input_path)
-    # Preprocess
-    segments = preprocess_audio(waveform, sr)    
-    # Predict
-    dry_segments = []
-    with torch.no_grad():
-        for seg in segments:
-            seg = seg.to(device)
-            pred = model(seg)  # [1, segment_length]
-            dry_segments.append(pred.cpu())
-    
-    # Combine and save
+    segments = preprocess_audio(waveform)    
+    # predict
+    dry_segments = parallel_predict(model, segments, device)
+    # combine segments and flatten
     dry_audio = torch.cat(dry_segments).flatten()
     print(dry_audio.shape)
     
     torchaudio.save(output_path, dry_audio.unsqueeze(0), sr)
-    print(f"Saved output with shape: {dry_audio.unsqueeze(0).shape}")
-
-if __name__ == "__main__":
-    # Config - CHANGE THESE TO MATCH YOUR MODEL
-    CONFIG = {
-        'model_path': 'audio_rnn_model.pth',
-        'input_audio': 'assets/brahms_predicted.wav',
-        'output_audio': 'assets/new_predicted.wav',
-        'segment_length': 22050  # Must match training
-    }
-    
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"Using device: {device}")
-    
-    # Load model
-    try:
-        model = load_model(CONFIG['model_path'], device)
-        print("Model loaded successfully")
-    except Exception as e:
-        print(f"Model loading failed: {str(e)}")
-        print("Check:")
-        print("- Model path exists")
-        print("- Model architecture matches this script")
-        print("- Saved model contains proper state_dict")
-        exit()
-
-    # Run prediction
-    try:
-        predict(model, CONFIG['input_audio'], CONFIG['output_audio'], device)
-        print("Prediction completed successfully")
-    except Exception as e:
-        print(f"Prediction failed: {str(e)}")
-        print("Common fixes:")
-        print("- Ensure input audio matches expected sample rate")
-        print("- Verify segment_length matches training config")
-        print("- Check audio channels (mono/stereo)")
+    print(f"Saved output {output_path} with shape: {dry_audio.unsqueeze(0).shape}")

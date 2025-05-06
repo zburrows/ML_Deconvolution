@@ -1,16 +1,14 @@
 import os
-import math
 from pedalboard import Pedalboard, Reverb
 from pedalboard.io import AudioFile
 import pickle
-import numpy as np
 
 def add_reverb(input_path, output_path):
     """Add reverb to audio file"""
     board = Pedalboard([Reverb(room_size=0.9, wet_level=0.3)])
     with AudioFile(input_path) as af:
         with AudioFile(output_path, 'w', af.samplerate, af.num_channels) as of:
-            chunk_size = 1024 * 1024  # Process in 1MB chunks
+            chunk_size = 1024 * 1024
             for _ in range(0, af.frames, chunk_size):
                 chunk = af.read(chunk_size)
                 processed = board(chunk, af.samplerate)
@@ -33,11 +31,10 @@ def process_folder(input_folder, wet_folder):
     return file_mapping
 
 if __name__ == "__main__":
-    # Configuration
     input_folder = "assets/dry"
     wet_folder = "assets/wet"
     
-    # Run processing
+    # add reverb and dump to wet folder
     mapping = process_folder(input_folder, wet_folder)
-    
+    # save mapping to pickle file
     pickle.dump(mapping, open("assets/file_mapping.pkl", "wb"))
