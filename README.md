@@ -64,6 +64,9 @@ python gui.py
 
 The output audio shows reduced high-frequency content, slightly smoother waveform peaks, and less perceived “fullness” consistent with reverb reduction:
 
+![Wet signal before and after RNN deconvolution](./assets/figure2.png)
+*Here, the output signal (orange) is compared to the input signal (green).*
+
 Issues observed:
 
 - Audible clicks due to segment stitching
