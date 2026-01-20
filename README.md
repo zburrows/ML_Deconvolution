@@ -1,8 +1,6 @@
 # Reverb Deconvolution with Machine Learning
 
-**Author**: Zachariah Burrows
-
-**Date**: May 2025
+Zachariah Burrows, May 2025
 
 ## Overview
 
